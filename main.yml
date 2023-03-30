@@ -1,0 +1,56 @@
+---
+- name: Install OpenSSL on Control Node
+  hosts: Control_Node
+  become: true
+
+  tasks:
+    - name: Install OpenSSL package
+      apt:
+        name: openssl
+        state: present
+
+- name: Create SSL CA
+  hosts: Control_Node
+  become: true
+
+  vars:
+    ca_directory: /etc/ssl/certs/my_ca
+    ca_name: CPE243_ca
+    ca_common_name: CPE243 HOA9.1 CA
+    ca_country: PH
+    ca_state: Manila
+    ca_locality: Manila
+    ca_organization: Computer Engineering
+    ca_organizational_unit: IT Department
+    ca_days_valid: 365
+    ca_key_size: 2048
+  
+  tasks:
+    - name: Create CA directory
+      file:
+        path: "{{ ca_directory }}"
+        state: directory
+        mode: 0755
+
+    - name: Generate CA private key
+      openssl_privatekey:
+        path: "{{ ca_directory }}/{{ ca_name }}.key"
+        size: "{{ ca_key_size }}"
+        state: absent
+      register: result
+
+    - name: Generate CA private key if absent
+      openssl_privatekey:
+        path: "{{ ca_directory }}/{{ ca_name }}.key"
+        size: "{{ ca_key_size }}"
+      when: result.changed
+
+    - name: Generate CA certificate
+      openssl_certificate:
+        path: "{{ ca_directory }}/{{ ca_name }}.crt"
+        privatekey_path: "{{ ca_directory }}/{{ ca_name }}.key"
+        common_name: "{{ ca_common_name }}"
+        key_usage: keyCertSign
+        state: present
+        provider: "entrust"
+      register: result
