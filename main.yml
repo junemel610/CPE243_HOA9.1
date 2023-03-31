@@ -1,56 +1,42 @@
 ---
-- name: Install OpenSSL on Control Node
+- name: Create Certificate Authority with SSL
   hosts: Control_Node
   become: true
 
   tasks:
-    - name: Install OpenSSL package
-      apt:
-        name: openssl
-        state: present
 
-- name: Create SSL CA
-  hosts: Control_Node
-  become: true
+  - name: Install OpenSSL
+    apt:
+      name: openssl
+      state: present
 
-  vars:
-    ca_directory: /etc/ssl/certs/my_ca
-    ca_name: CPE243_ca
-    ca_common_name: CPE243 HOA9.1 CA
-    ca_country: PH
-    ca_state: Manila
-    ca_locality: Manila
-    ca_organization: Computer Engineering
-    ca_organizational_unit: IT Department
-    ca_days_valid: 365
-    ca_key_size: 2048
-  
-  tasks:
-    - name: Create CA directory
-      file:
-        path: "{{ ca_directory }}"
-        state: directory
-        mode: 0755
+  - name: Generate CA key
+    openssl_privatekey:
+      path: /etc/ssl/private/ca.key
+      size: 4096
+    register: ca_key
 
-    - name: Generate CA private key
-      openssl_privatekey:
-        path: "{{ ca_directory }}/{{ ca_name }}.key"
-        size: "{{ ca_key_size }}"
-        state: absent
-      register: result
+  - name: Generate CA certificate
+    openssl_csr:
+      path: /etc/ssl/certs/ca.csr
+      privatekey_path: /etc/ssl/private/ca.key
+      common_name: "My CA"
+      country_name: "PH"
+      state_or_province_name: "Metro Manila"
+      locality_name: "Manila City"
+      organization_name: "My Organization"
+      email_address: "ca@example.com"
+    register: ca_csr
 
-    - name: Generate CA private key if absent
-      openssl_privatekey:
-        path: "{{ ca_directory }}/{{ ca_name }}.key"
-        size: "{{ ca_key_size }}"
-      when: result.changed
+  - name: Self-sign the CA certificate
+    openssl_certificate:
+      path: /etc/ssl/certs/ca.crt
+      privatekey_path: /etc/ssl/private/ca.key
+      csr_path: /etc/ssl/certs/ca.csr
+      provider: selfsigned
+      force: true
 
-    - name: Generate CA certificate
-      openssl_certificate:
-        path: "{{ ca_directory }}/{{ ca_name }}.crt"
-        privatekey_path: "{{ ca_directory }}/{{ ca_name }}.key"
-        common_name: "{{ ca_common_name }}"
-        key_usage: keyCertSign
-        state: present
-        provider: "entrust"
-      register: result
+  - name: Copy the CA certificate to clients
+    copy:
+      src: /etc/ssl/certs/ca-certificates.crt
+      dest: /etc/pki/ca-trust/source/anchors/
